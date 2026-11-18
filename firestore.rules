@@ -1,0 +1,344 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUidList(listVal, maxLen) {
+      return listVal is list &&
+             listVal.size() <= maxLen &&
+             (listVal.size() == 0 || listVal[0] is string);
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUserProfile(data, userId) {
+      return data.uid is string &&
+             data.uid == userId &&
+             data.uid == request.auth.uid &&
+             data.ageConfirmed is bool &&
+             data.ageConfirmed == true &&
+             (!('rulesAcceptedAt' in data) || (data.rulesAcceptedAt is timestamp && data.rulesAcceptedAt <= request.time)) &&
+             isValidUidList(data.blockedUids, 100) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidQueueEntry(data, entryId) {
+      return data.uid is string &&
+             data.uid == entryId &&
+             data.uid == request.auth.uid &&
+             data.role in ['SPEAKER', 'LISTENER'] &&
+             data.nickname is string &&
+             data.nickname.size() >= 3 &&
+             data.nickname.size() <= 30 &&
+             isValidUidList(data.blockedUids, 100) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidRoomParticipants(data) {
+      return data.speakerUid is string &&
+             isValidId(data.speakerUid) &&
+             data.listenerUid is string &&
+             isValidId(data.listenerUid) &&
+             data.speakerUid != data.listenerUid &&
+             data.participantUids is list &&
+             data.participantUids.size() == 2 &&
+             data.speakerUid in data.participantUids &&
+             data.listenerUid in data.participantUids;
+    }
+
+    function isValidChatRoom(data) {
+      return isValidRoomParticipants(data) &&
+             data.speakerNickname is string &&
+             data.speakerNickname.size() >= 3 &&
+             data.speakerNickname.size() <= 30 &&
+             data.listenerNickname is string &&
+             data.listenerNickname.size() >= 3 &&
+             data.listenerNickname.size() <= 30 &&
+             data.status in ['ACTIVE', 'ENDED'] &&
+             data.startedAt is timestamp &&
+             data.startedAt <= request.time &&
+             data.endsAt is timestamp &&
+             data.deleteAt is timestamp &&
+             data.extendRequestedBySpeaker is bool &&
+             data.extendRequestedByListener is bool &&
+             data.extendedApplied is bool &&
+             (!('endedByUid' in data) || (data.endedByUid is string && isValidId(data.endedByUid))) &&
+             (!('endedAt' in data) || (data.endedAt is timestamp && data.endedAt <= request.time)) &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidChatMessage(data, roomId) {
+      return data.roomId is string &&
+             data.roomId == roomId &&
+             data.senderUid is string &&
+             data.senderUid == request.auth.uid &&
+             data.senderRole in ['SPEAKER', 'LISTENER'] &&
+             data.participantUids is list &&
+             data.participantUids.size() == 2 &&
+             request.auth.uid in data.participantUids &&
+             data.text is string &&
+             data.text.size() >= 1 &&
+             data.text.size() <= 500 &&
+             data.flagged is bool &&
+             (!('flagReason' in data) || (data.flagReason is string && data.flagReason.size() <= 120)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidReportEntry(data) {
+      return data.roomId is string &&
+             isValidId(data.roomId) &&
+             data.reporterUid is string &&
+             data.reporterUid == request.auth.uid &&
+             data.reportedUid is string &&
+             isValidId(data.reportedUid) &&
+             data.reportedUid != data.reporterUid &&
+             data.reason is string &&
+             data.reason.size() >= 1 &&
+             data.reason.size() <= 200 &&
+             data.lastMessages is list &&
+             data.lastMessages.size() <= 5 &&
+             (data.lastMessages.size() == 0 || (data.lastMessages[0] is string && data.lastMessages[0].size() <= 600)) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidCrisisEvent(data) {
+      return data.roomId is string &&
+             isValidId(data.roomId) &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    function isValidMoodEntry(data) {
+      return data.mood in ['HALKA', 'THODA_BEHTAR', 'WAISA_HI', 'BHARI'] &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time;
+    }
+
+    // --- 1. USERS COLLECTION (Strictly Owner-Only, Zero PII) ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll(['uid', 'ageConfirmed', 'blockedUids', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['uid', 'ageConfirmed', 'rulesAcceptedAt', 'blockedUids', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['ageConfirmed', 'rulesAcceptedAt', 'blockedUids', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // --- 2. MATCHMAKING QUEUE ---
+    // Note: No PII is stored in queue (only uid, role, nickname, blockedUids, createdAt).
+    // Client queries MUST filter by role ('SPEAKER' or 'LISTENER') to match waiting peers.
+    // For strict server-only queue matching, deploy Cloud Functions and set queue read to false.
+    match /queue/{entryId} {
+      allow get: if isSignedIn() && isValidId(entryId) && entryId == request.auth.uid;
+      allow list: if isSignedIn() && existing().role in ['SPEAKER', 'LISTENER'];
+
+      allow create: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       entryId == request.auth.uid &&
+                       incoming().keys().hasAll(['uid', 'role', 'nickname', 'blockedUids', 'createdAt']) &&
+                       incoming().keys().hasOnly(['uid', 'role', 'nickname', 'blockedUids', 'createdAt']) &&
+                       isValidQueueEntry(incoming(), entryId);
+
+      allow update: if false;
+
+      allow delete: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       (entryId == request.auth.uid || existing().role in ['SPEAKER', 'LISTENER']);
+    }
+
+    // --- 3. CHAT ROOMS (Participants-Only) ---
+    match /rooms/{roomId} {
+      allow get: if isSignedIn() &&
+                    isValidId(roomId) &&
+                    request.auth.uid in existing().participantUids;
+
+      allow list: if isSignedIn() &&
+                     request.auth.uid in existing().participantUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       incoming().keys().hasAll([
+                         'speakerUid', 'listenerUid', 'participantUids',
+                         'speakerNickname', 'listenerNickname', 'status',
+                         'startedAt', 'endsAt', 'deleteAt',
+                         'extendRequestedBySpeaker', 'extendRequestedByListener',
+                         'extendedApplied', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'speakerUid', 'listenerUid', 'participantUids',
+                         'speakerNickname', 'listenerNickname', 'status',
+                         'startedAt', 'endsAt', 'deleteAt',
+                         'extendRequestedBySpeaker', 'extendRequestedByListener',
+                         'extendedApplied', 'updatedAt'
+                       ]) &&
+                       isValidChatRoom(incoming()) &&
+                       request.auth.uid in incoming().participantUids &&
+                       incoming().status == 'ACTIVE' &&
+                       incoming().extendRequestedBySpeaker == false &&
+                       incoming().extendRequestedByListener == false &&
+                       incoming().extendedApplied == false;
+
+      allow update: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       isValidChatRoom(incoming()) &&
+                       request.auth.uid in existing().participantUids &&
+                       existing().status == 'ACTIVE' &&
+                       incoming().speakerUid == existing().speakerUid &&
+                       incoming().listenerUid == existing().listenerUid &&
+                       incoming().participantUids == existing().participantUids &&
+                       incoming().speakerNickname == existing().speakerNickname &&
+                       incoming().listenerNickname == existing().listenerNickname &&
+                       incoming().startedAt == existing().startedAt &&
+                       (
+                         // Action 1: Request or mutually agree to +10 min extension
+                         (
+                           incoming().status == 'ACTIVE' &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'extendRequestedBySpeaker',
+                             'extendRequestedByListener',
+                             'extendedApplied',
+                             'endsAt',
+                             'deleteAt',
+                             'updatedAt'
+                           ]) &&
+                           (
+                             (request.auth.uid == existing().speakerUid &&
+                              incoming().extendRequestedBySpeaker == true &&
+                              incoming().extendRequestedByListener == existing().extendRequestedByListener) ||
+                             (request.auth.uid == existing().listenerUid &&
+                              incoming().extendRequestedByListener == true &&
+                              incoming().extendRequestedBySpeaker == existing().extendRequestedBySpeaker)
+                           )
+                         ) ||
+                         // Action 2: End session (terminal state transition)
+                         (
+                           incoming().status == 'ENDED' &&
+                           incoming().endedByUid == request.auth.uid &&
+                           incoming().endedAt is timestamp &&
+                           incoming().endedAt <= request.time &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'status', 'endedByUid', 'endedAt', 'deleteAt', 'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if false;
+
+      // --- 4. EPHEMERAL MESSAGES SUBCOLLECTION ---
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn() &&
+                              request.auth.uid in existing().participantUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(roomId) &&
+                         isValidId(messageId) &&
+                         incoming().keys().hasAll([
+                           'roomId', 'senderUid', 'senderRole',
+                           'participantUids', 'text', 'flagged', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'roomId', 'senderUid', 'senderRole',
+                           'participantUids', 'text', 'flagged', 'flagReason', 'createdAt'
+                         ]) &&
+                         isValidChatMessage(incoming(), roomId) &&
+                         get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'ACTIVE' &&
+                         request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.participantUids &&
+                         incoming().participantUids == get(/databases/$(database)/documents/rooms/$(roomId)).data.participantUids;
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() &&
+                         isValidId(roomId) &&
+                         isValidId(messageId) &&
+                         request.auth.uid in existing().participantUids;
+      }
+    }
+
+    // --- 5. REPORTS COLLECTION ---
+    match /reports/{reportId} {
+      allow get, list: if isSignedIn() &&
+                            (existing().reporterUid == request.auth.uid ||
+                             existing().reportedUid == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       incoming().keys().hasAll([
+                         'roomId', 'reporterUid', 'reportedUid',
+                         'reason', 'lastMessages', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'roomId', 'reporterUid', 'reportedUid',
+                         'reason', 'lastMessages', 'createdAt'
+                       ]) &&
+                       isValidReportEntry(incoming());
+
+      allow update: if false;
+
+      allow delete: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       existing().reporterUid == request.auth.uid;
+    }
+
+    // --- 6. ANONYMOUS CRISIS EVENTS (Write-only, no UID, no message text) ---
+    match /crisis_events/{eventId} {
+      allow read, update, delete: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(eventId) &&
+                       incoming().keys().hasAll(['roomId', 'createdAt']) &&
+                       incoming().keys().hasOnly(['roomId', 'createdAt']) &&
+                       isValidCrisisEvent(incoming());
+    }
+
+    // --- 7. ANONYMOUS MOOD FEEDBACK (Write-only, no UID) ---
+    match /mood_feedback/{entryId} {
+      allow read, update, delete: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       incoming().keys().hasAll(['mood', 'createdAt']) &&
+                       incoming().keys().hasOnly(['mood', 'createdAt']) &&
+                       isValidMoodEntry(incoming());
+    }
+  }
+}

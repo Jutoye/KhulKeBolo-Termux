@@ -1,0 +1,6 @@
+{
+  "name": "Khul Ke Bolo",
+  "description": "Anonymous peer-listening app in Roman Urdu and English where speakers share openly and listeners respond with gentle, non-judgmental support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

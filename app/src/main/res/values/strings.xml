@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Khul Ke Bolo</string>
+    <string name="tagline">Aap bolein, hum sunte hain</string>
+    <string name="blocked_message_warning">Is message mein personal ya nuksan dene wali baat hai, isliye bheja nahi ja sakta.</string>
+    <string name="crisis_banner_message">Aap ki baat sun li gayi hai. Agar aap abhi khatre mein hain to kisi se fori madad lein.</string>
+    <string name="privacy_notice_roman_urdu">Khul Ke Bolo aap ki privacy ka poora khayal rakhta hai. Chat mein aap ka naam, phone number, email ya tasveer kisi ko nahi dikhti — sirf ek random Dost nickname dikhaya jata hai. Tamam messages session khatam hone par delete kar diye jaate hain (aur zyada se zyada 1 ghante mein khud delete ho jaate hain). Sirf aap ki umar ki tasdeeq (18+) aur qawaneen manzoori ka waqt mehfooz kiya jata hai.</string>
+    <string name="privacy_notice_english">Privacy Notice (Placeholder — edit before release): Khul Ke Bolo never displays your real name, email, or phone number to chat partners. Peer chats use random Dost nicknames only. Messages are deleted when a session ends and carry a 1-hour TTL. Mood feedback and crisis helpline logs are stored anonymously without user IDs. You can permanently delete all your data at any time from Settings.</string>
+    <string name="about_description">Khul Ke Bolo ek mehfooz, anonymous peer-listening space hai jahan log bina kisi judge kiye jaane apni baat keh sakte hain.</string>
+</resources>

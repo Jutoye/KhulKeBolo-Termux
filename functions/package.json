@@ -1,0 +1,11 @@
+{
+  "name": "khul-ke-bolo-functions",
+  "description": "Optional Cloud Functions for Khul Ke Bolo server-side moderation and ephemeral room cleanup.",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

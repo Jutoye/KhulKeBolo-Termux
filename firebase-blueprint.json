@@ -1,0 +1,297 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Minimal non-PII user state storing age confirmation, rules acceptance timestamp, and blocked partner UIDs.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Authenticated Firebase UID matching document ID."
+        },
+        "ageConfirmed": {
+          "type": "boolean",
+          "description": "Boolean confirming user is 18 or older. Date of birth is never stored."
+        },
+        "rulesAcceptedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user tapped Main Samajh Gaya."
+        },
+        "blockedUids": {
+          "type": "array",
+          "description": "List of blocked partner UIDs (max 100)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of record creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["uid", "ageConfirmed", "blockedUids", "createdAt", "updatedAt"]
+    },
+    "QueueEntry": {
+      "title": "QueueEntry",
+      "description": "Waiting user entry in matchmaking queue.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Waiting user UID."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["SPEAKER", "LISTENER"],
+          "description": "Selected role for this session."
+        },
+        "nickname": {
+          "type": "string",
+          "description": "Client-generated anonymous Dost nickname."
+        },
+        "blockedUids": {
+          "type": "array",
+          "description": "Blocked UIDs excluded from matching."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user entered queue."
+        }
+      },
+      "required": ["uid", "role", "nickname", "blockedUids", "createdAt"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "Matched anonymous 1-on-1 peer-listening room.",
+      "type": "object",
+      "properties": {
+        "speakerUid": {
+          "type": "string",
+          "description": "UID of the speaker."
+        },
+        "listenerUid": {
+          "type": "string",
+          "description": "UID of the listener."
+        },
+        "participantUids": {
+          "type": "array",
+          "description": "Array containing [speakerUid, listenerUid]."
+        },
+        "speakerNickname": {
+          "type": "string",
+          "description": "Random Dost nickname for speaker."
+        },
+        "listenerNickname": {
+          "type": "string",
+          "description": "Random Dost nickname for listener."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "ENDED"],
+          "description": "Current room lifecycle state."
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when session started."
+        },
+        "endsAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Scheduled session end timestamp (default startedAt + 20 minutes)."
+        },
+        "deleteAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "TTL expiration timestamp (endsAt + 1 hour)."
+        },
+        "extendRequestedBySpeaker": {
+          "type": "boolean",
+          "description": "True if speaker requested/agreed to +10 min extension."
+        },
+        "extendRequestedByListener": {
+          "type": "boolean",
+          "description": "True if listener requested/agreed to +10 min extension."
+        },
+        "extendedApplied": {
+          "type": "boolean",
+          "description": "True once the +10 min mutual extension has been applied."
+        },
+        "endedByUid": {
+          "type": "string",
+          "description": "Optional UID of participant who ended early."
+        },
+        "endedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional server timestamp when room ended."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "speakerUid",
+        "listenerUid",
+        "participantUids",
+        "speakerNickname",
+        "listenerNickname",
+        "status",
+        "startedAt",
+        "endsAt",
+        "deleteAt",
+        "extendRequestedBySpeaker",
+        "extendRequestedByListener",
+        "extendedApplied",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Ephemeral chat message inside a peer-listening room.",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "description": "Parent room ID."
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "Sender UID."
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["SPEAKER", "LISTENER"],
+          "description": "Sender role in the room."
+        },
+        "participantUids": {
+          "type": "array",
+          "description": "Denormalized participant UIDs for zero-lookup security rules."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message body (1 to 500 characters)."
+        },
+        "flagged": {
+          "type": "boolean",
+          "description": "True if message was flagged by moderation for report review."
+        },
+        "flagReason": {
+          "type": "string",
+          "description": "Optional moderation flag reason."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when message was sent."
+        }
+      },
+      "required": ["roomId", "senderUid", "senderRole", "participantUids", "text", "flagged", "createdAt"]
+    },
+    "ReportEntry": {
+      "title": "ReportEntry",
+      "description": "Safety report filed by a participant against a partner.",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "description": "Room ID where incident occurred."
+        },
+        "reporterUid": {
+          "type": "string",
+          "description": "UID of reporting participant."
+        },
+        "reportedUid": {
+          "type": "string",
+          "description": "UID of reported partner (used for 24-hour 3-report suspension check)."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Report reason."
+        },
+        "lastMessages": {
+          "type": "array",
+          "description": "Optional up to 5 recent message snippets if reporter consented."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when report was created."
+        }
+      },
+      "required": ["roomId", "reporterUid", "reportedUid", "reason", "lastMessages", "createdAt"]
+    },
+    "CrisisEvent": {
+      "title": "CrisisEvent",
+      "description": "Anonymous crisis detection event log for admin review (no message text or UID).",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "description": "Room ID where crisis keywords were detected."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of detection."
+        }
+      },
+      "required": ["roomId", "createdAt"]
+    },
+    "MoodEntry": {
+      "title": "MoodEntry",
+      "description": "Anonymous post-session mood check-in saved without UID.",
+      "type": "object",
+      "properties": {
+        "mood": {
+          "type": "string",
+          "enum": ["HALKA", "THODA_BEHTAR", "WAISA_HI", "BHARI"],
+          "description": "Selected mood after session."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when mood was recorded."
+        }
+      },
+      "required": ["mood", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User consent flags and blocklist, strictly isolated to owner."
+    },
+    "/queue/{userId}": {
+      "schema": { "$ref": "#/entities/QueueEntry" },
+      "description": "Matchmaking queue keyed by waiting user UID."
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/ChatRoom" },
+      "description": "Active and ended 1-on-1 anonymous listening rooms."
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Ephemeral messages deleted on session end."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ReportEntry" },
+      "description": "Safety reports for abuse prevention and 24-hour ban checks."
+    },
+    "/crisis_events/{eventId}": {
+      "schema": { "$ref": "#/entities/CrisisEvent" },
+      "description": "Anonymous crisis helpline trigger logs without message text or UID."
+    },
+    "/mood_feedback/{entryId}": {
+      "schema": { "$ref": "#/entities/MoodEntry" },
+      "description": "Anonymous post-session mood feedback without UID."
+    }
+  }
+}
